@@ -8,6 +8,8 @@ user_id_to_idx = {}
 book_title_to_idx = {}
 book_titles = []
 ratings_matrix = defaultdict(dict)
+lock = threading.Lock()  
+
 
 
 def load_data_threaded(arquivo, start, end):
@@ -17,20 +19,21 @@ def load_data_threaded(arquivo, start, end):
         user_index = start
         book_index = start
         for _ in range(start):
-            next(reader)  # Pular linhas até o início desta thread
+            next(reader)  
         for _ in range(start, end):
             row = next(reader)
             user_id, rating, book_title = row
-            if user_id not in user_id_to_idx:
-                user_id_to_idx[user_id] = user_index
-                user_index += 1
-            if book_title not in book_title_to_idx:
-                book_title_to_idx[book_title] = book_index
-                book_titles.append(book_title)
-                book_index += 1
-            user_idx = user_id_to_idx[user_id]
-            book_idx = book_title_to_idx[book_title]
-            ratings_matrix[user_idx][book_idx] = float(rating)
+            with lock:
+                if user_id not in user_id_to_idx:
+                    user_id_to_idx[user_id] = user_index
+                    user_index += 1
+                if book_title not in book_title_to_idx:
+                    book_title_to_idx[book_title] = book_index
+                    book_titles.append(book_title)
+                    book_index += 1
+                user_idx = user_id_to_idx[user_id]
+                book_idx = book_title_to_idx[book_title]
+                ratings_matrix[user_idx][book_idx] = float(rating)
     print(f"Thread {threading.current_thread().name} terminada")
 
 def load_data(arquivo):
@@ -106,7 +109,9 @@ if __name__ == "__main__":
 
     start_time = time.time()
     
-    load_data("teste2.csv")
+    load_data("teste3.csv")
+
+    print(len(ratings_matrix))
 
     end_time = time.time()
     print("Tempo de resposta: ",  round((end_time - start_time) * 1e3)," milisegundos")    
