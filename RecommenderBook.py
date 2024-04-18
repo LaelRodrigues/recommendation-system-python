@@ -39,7 +39,7 @@ def recommend_books(user_id, k):
     similarities = {}
     for other_user_idx, other_user_ratings in ratings_matrix.items():
         if other_user_idx != user_idx:
-            similarity = calcular_similaridade_cosseno(user_ratings, other_user_ratings)
+            similarity = calculate_cosine_similarity(user_ratings, other_user_ratings)
             if similarity > 0:
                 similarities[other_user_idx] = similarity
 
@@ -57,7 +57,7 @@ def recommend_books(user_id, k):
     return recommended_books
 
 
-def calcular_similaridade_cosseno(vector1, vector2):
+def calculate_cosine_similarity(vector1, vector2):
     dot_product = 0
     norm_vector1 = 0
     norm_vector2 = 0
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     loadData("teste3.csv")
 
     end_time = time.time()
-    print("Tempo de resposta: ", round((end_time - start_time)) * 1e3," microssegundos")
+    print("Tempo de resposta: ", round((end_time - start_time)) * 1e3," milissegundos")
 
     user_id = "A3UH4UZ4RSVO82"
     k = 5
@@ -94,4 +94,4 @@ if __name__ == "__main__":
         print(i + 1, ".", book_title, " - Rating:", rating)
 
     end_time = time.time()
-    print("Tempo de resposta: ", round((end_time - start_time)) * 1e3, " microssegundos")
+    print("Tempo de resposta: ", round((end_time - start_time)) * 1e3, " milissegundos")
