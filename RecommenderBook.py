@@ -13,7 +13,6 @@ lock = threading.Lock()
 
 
 def load_data_threaded(arquivo, start, end):
-    print(f"Thread {threading.current_thread().name} iniciada")
     with open(arquivo, newline='') as csvfile:
         reader = csv.reader(csvfile)
         user_index = start
@@ -34,7 +33,6 @@ def load_data_threaded(arquivo, start, end):
                 user_idx = user_id_to_idx[user_id]
                 book_idx = book_title_to_idx[book_title]
                 ratings_matrix[user_idx][book_idx] = float(rating)
-    print(f"Thread {threading.current_thread().name} terminada")
 
 def load_data(arquivo):
     with open(arquivo, newline='') as csvfile:
@@ -52,7 +50,15 @@ def load_data(arquivo):
 
     for thread in threads:
         thread.join()
-        
+
+
+def calculate_similarity_thread(user_ratings, start_idx, end_idx, similarities):
+    for other_user_idx in range(start_idx, end_idx):
+        other_user_ratings = ratings_matrix[other_user_idx]
+        similarity = calculate_cosine_similarity(user_ratings, other_user_ratings)
+        if similarity > 0:
+            with lock:
+                similarities[other_user_idx] = similarity
         
 def recommend_books(user_id, k):
     user_idx = user_id_to_idx.get(user_id, -1)
@@ -61,14 +67,22 @@ def recommend_books(user_id, k):
         return []
 
     user_ratings = ratings_matrix.get(user_idx, {})
-
     similarities = {}
-    for other_user_idx, other_user_ratings in ratings_matrix.items():
-        if other_user_idx != user_idx:
-            similarity = calcular_similaridade_cosseno(user_ratings, other_user_ratings)
-            if similarity > 0:
-                similarities[other_user_idx] = similarity
+    threads = []
+    
+    num_users = len(ratings_matrix)
+    chunk_size = num_users // 4
 
+    for i in range(0, num_users, chunk_size):
+        start_idx = i
+        end_idx = min(i + chunk_size, num_users)
+        thread = threading.Thread(target=calculate_similarity_thread, args=(user_ratings, start_idx, end_idx, similarities))
+        threads.append(thread)
+        thread.start()
+
+    for thread in threads:
+        thread.join()
+        
     similar_users = sorted(similarities, key=similarities.get, reverse=True)
 
     recommended_books = []
@@ -83,7 +97,7 @@ def recommend_books(user_id, k):
     return recommended_books
 
 
-def calcular_similaridade_cosseno(vector1, vector2):
+def calculate_cosine_similarity(vector1, vector2):
     dot_product = 0
     norm_vector1 = 0
     norm_vector2 = 0
@@ -109,28 +123,19 @@ if __name__ == "__main__":
 
     start_time = time.time()
     
-    load_data("teste3.csv")
+    load_data("teste2.csv")
 
     print(len(ratings_matrix))
 
     end_time = time.time()
     print("Tempo de resposta: ",  round((end_time - start_time) * 1e3)," milisegundos")    
 
-    users = ['A3UH4UZ4RSVO82', 'A3UH4UZ4RSVO82', 'A3UH4UZ4RSVO82', 'A3UH4UZ4RSVO82']
-
     user_id = "A3UH4UZ4RSVO82"
     k = 5
 
     start_time = time.time()
 
-    threads = []
-    for user_id in users:
-        thread = threading.Thread(target=processRecommendations, args=(user_id, k))
-        threads.append(thread)
-        thread.start()
-
-    for thread in threads:
-        thread.join()
-  
+    processRecommendations(user_id, k)
+    
     end_time = time.time()
     print("Tempo de reposta: ", round((end_time - start_time) * 1e3), "milisegundos")
