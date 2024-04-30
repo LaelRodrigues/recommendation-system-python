@@ -3,14 +3,13 @@ import math
 import threading
 import time
 from collections import defaultdict
+import concurrent.futures
 
 user_id_to_idx = {}
 book_title_to_idx = {}
 book_titles = []
 ratings_matrix = defaultdict(dict)
-lock = threading.Lock()  
-
-
+semaphore = threading.Semaphore()
 
 def load_data_threaded(arquivo, start, end):
     with open(arquivo, newline='') as csvfile:
@@ -18,11 +17,11 @@ def load_data_threaded(arquivo, start, end):
         user_index = start
         book_index = start
         for _ in range(start):
-            next(reader)  
+            next(reader)
         for _ in range(start, end):
             row = next(reader)
             user_id, rating, book_title = row
-            with lock:
+            with semaphore:
                 if user_id not in user_id_to_idx:
                     user_id_to_idx[user_id] = user_index
                     user_index += 1
@@ -40,26 +39,19 @@ def load_data(arquivo):
         num_lines = sum(1 for _ in reader)
 
     chunk_size = (num_lines + 3) // 4
-    threads = []
-    for i in range(4):
-        start = i * chunk_size
-        end = min((i + 1) * chunk_size, num_lines)
-        thread = threading.Thread(target=load_data_threaded, args=(arquivo, start, end))
-        thread.start()
-        threads.append(thread)
-
-    for thread in threads:
-        thread.join()
-
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(load_data_threaded, arquivo, i * chunk_size, min((i + 1) * chunk_size, num_lines)) for i in range(4)]
+        for future in concurrent.futures.as_completed(futures):
+            future.result()
 
 def calculate_similarity_thread(user_ratings, start_idx, end_idx, similarities):
     for other_user_idx in range(start_idx, end_idx):
         other_user_ratings = ratings_matrix[other_user_idx]
         similarity = calculate_cosine_similarity(user_ratings, other_user_ratings)
         if similarity > 0:
-            with lock:
+            with semaphore:
                 similarities[other_user_idx] = similarity
-        
+
 def recommend_books(user_id, k):
     user_idx = user_id_to_idx.get(user_id, -1)
     if user_idx == -1:
@@ -68,21 +60,13 @@ def recommend_books(user_id, k):
 
     user_ratings = ratings_matrix.get(user_idx, {})
     similarities = {}
-    threads = []
-    
-    num_users = len(ratings_matrix)
-    chunk_size = num_users // 4
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        num_users = len(ratings_matrix)
+        chunk_size = num_users // 4
+        futures = [executor.submit(calculate_similarity_thread, user_ratings, i, min(i + chunk_size, num_users), similarities) for i in range(0, num_users, chunk_size)]
+        for future in concurrent.futures.as_completed(futures):
+            future.result()
 
-    for i in range(0, num_users, chunk_size):
-        start_idx = i
-        end_idx = min(i + chunk_size, num_users)
-        thread = threading.Thread(target=calculate_similarity_thread, args=(user_ratings, start_idx, end_idx, similarities))
-        threads.append(thread)
-        thread.start()
-
-    for thread in threads:
-        thread.join()
-        
     similar_users = sorted(similarities, key=similarities.get, reverse=True)
 
     recommended_books = []
@@ -95,7 +79,6 @@ def recommend_books(user_id, k):
                     return recommended_books
 
     return recommended_books
-
 
 def calculate_cosine_similarity(vector1, vector2):
     dot_product = 0
@@ -117,25 +100,19 @@ def processRecommendations(user_id, k):
     recommended_books = recommend_books(user_id, k)
     print("Recomendações de livros para o usuário", user_id + ":")
     for i, (book_title, rating) in enumerate(recommended_books):
-        print(i + 1, ".", book_title, " - Rating:", rating)    
+        print(i + 1, ".", book_title, " - Rating:", rating)
 
 if __name__ == "__main__":
-
     start_time = time.time()
-    
     load_data("teste2.csv")
-
     print(len(ratings_matrix))
-
     end_time = time.time()
-    print("Tempo de resposta: ",  round((end_time - start_time) * 1e3)," milisegundos")    
+    print("Tempo de resposta:", round((end_time - start_time) * 1e3), "milisegundos")
 
     user_id = "A3UH4UZ4RSVO82"
     k = 5
 
     start_time = time.time()
-
     processRecommendations(user_id, k)
-    
     end_time = time.time()
-    print("Tempo de reposta: ", round((end_time - start_time) * 1e3), "milisegundos")
+    print("Tempo de resposta:", round((end_time - start_time) * 1e3), "milisegundos")
